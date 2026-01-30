@@ -1,6 +1,6 @@
 
 import React, { useState, useCallback, useEffect, useRef } from 'react';
-import { Task, Message, TaskStatus, StepStatus, MessageType, User, FileItem, UIIntent } from './types';
+import { Task, Message, TaskStatus, StepStatus, MessageType, User, FileItem, UIIntent, Attachment } from './types';
 import { INITIAL_TASKS, INITIAL_FILES, WELCOME_MESSAGE, CURRENT_USER } from './constants';
 import ChatArea from './components/ChatArea';
 import TaskDrawer from './components/TaskDrawer';
@@ -123,20 +123,24 @@ const App: React.FC = () => {
     };
   }, [isResizing, resize, stopResizing]);
 
-  const addMessage = useCallback((text: string, type: MessageType, actions?: any[]) => {
+  const addMessage = useCallback((text: string, type: MessageType, actions?: any[], attachments?: Attachment[]) => {
     setMessages(prev => [...prev, {
       id: Math.random().toString(36).substr(2, 9),
-      text, type, timestamp: Date.now(), actions
+      text, type, timestamp: Date.now(), actions, attachments
     }]);
   }, []);
 
-  const handleSendMessage = async (text: string) => {
-    addMessage(text, 'USER');
+  const handleSendMessage = async (text: string, attachments?: Attachment[]) => {
+    addMessage(text, 'USER', undefined, attachments);
     
+    const contextStr = attachments && attachments.length > 0 
+      ? `\n[用户附加了 ${attachments.length} 个文件作为上下文]` 
+      : '';
+
     // Check if user is asking to start a task
     if (text.includes('我想') || text.includes('开始') || text.includes('策划')) {
-      addMessage("正在根据您的意图进行动态任务编排...", 'AI');
-      const plan = await planTaskWithGemini(text);
+      addMessage("正在根据您的意图及上传的资源进行动态任务编排...", 'AI');
+      const plan = await planTaskWithGemini(text + contextStr);
       if (plan && plan.steps) {
         const newTask: Task = {
           id: 'T' + Math.floor(Math.random() * 1000),
@@ -155,14 +159,14 @@ const App: React.FC = () => {
         };
         setTasks(prev => [newTask, ...prev]);
         setActiveTaskId(newTask.id);
-        addMessage(`任务“${plan.taskName}”已成功编排，请在右侧节点流水线中查看。`, 'AI', [
+        addMessage(`任务“${plan.taskName}”已成功编排，相关文档已作为执行参考。`, 'AI', [
           { label: '查看任务详情', value: 'view_active', recommended: true }
         ]);
       } else {
         addMessage("编排过程中遇到了一些困难，建议您手动创建或提供更详细的意图。", 'AI');
       }
     } else {
-      const response = await chatWithGemini(text);
+      const response = await chatWithGemini(text + contextStr);
       addMessage(response || "我在这里，请随时下达指令。", 'AI');
     }
   };
