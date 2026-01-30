@@ -120,33 +120,12 @@ export const INITIAL_FILES: FileItem[] = [
     isCloud: false,
     isStarred: true,
     thumbnail: 'https://images.unsplash.com/photo-1614850523296-d8c1af93d400?auto=format&fit=crop&w=300'
-  },
-  {
-    id: 'p1',
-    name: '行业调研报告-2024.pdf',
-    type: 'PDF',
-    size: '8.1 MB',
-    owner: MOCK_USERS[1],
-    updatedAt: Date.now() - 259200000,
-    isCloud: false,
-    isStarred: false,
-  },
-  {
-    id: 'sf1',
-    name: '核心价值观文档.docx',
-    type: 'DOC',
-    size: '1.1 MB',
-    owner: MOCK_USERS[0],
-    updatedAt: Date.now() - 3600000,
-    isCloud: true,
-    isStarred: false,
-    parentId: 'f1'
   }
 ];
 
 export const INITIAL_TASKS: Task[] = [
   {
-    id: 't1',
+    id: 'T1',
     name: 'Q4 市场整合报告',
     description: '整合全球销售数据，分析行业趋势并生成 PDF 报告。',
     status: TaskStatus.RUNNING,
@@ -159,54 +138,76 @@ export const INITIAL_TASKS: Task[] = [
         uiIntent: UIIntent.NONE,
         assignee: MOCK_USERS[1],
         submission: {
-          content: '北美和欧洲的数据已经同步。亚太地区本季度增长了 12%。',
-          attachments: [{ name: 'sales_apac_q4.csv', url: '#', type: 'csv' }],
+          content: '亚太地区本季度增长了 12%。',
+          attachments: [],
           submittedAt: Date.now() - 10000000
         }
       },
       {
         id: 's2',
         name: '撰写行业趋势分析',
-        status: StepStatus.NEED_CONFIRM,
+        status: StepStatus.RUNNING,
         uiIntent: UIIntent.FORM,
-        assignee: MOCK_USERS[0],
-        uiSchema: {
-          title: '撰写报告正文',
-          fields: [
-            { key: 'summary', label: '摘要内容', type: 'text', required: true },
-          ],
-          actions: [{ type: 'SUBMIT', label: '提交初稿' }]
-        }
+        assignee: MOCK_USERS[0]
       },
       {
         id: 's3',
-        name: '生成并审核最终报告',
+        name: '生成最终 PDF',
         status: StepStatus.PENDING,
-        uiIntent: UIIntent.NONE,
-        assignee: MOCK_USERS[2]
+        uiIntent: UIIntent.NONE
       }
     ]
   },
   {
-    id: 't2',
+    id: 'T2',
     name: '社交媒体品牌周计划',
     description: '下周全平台内容排期与视觉资源协调。',
     status: TaskStatus.RUNNING,
     initiator: MOCK_USERS[0],
     steps: [
+      { id: 's2-1', name: '文案初稿', status: StepStatus.RUNNING, uiIntent: UIIntent.NONE, assignee: MOCK_USERS[2] },
+      { id: 's2-2', name: '视觉配套', status: StepStatus.PENDING, uiIntent: UIIntent.NONE, assignee: MOCK_USERS[3] }
+    ]
+  },
+  {
+    id: 'T3',
+    name: 'Zenith 品牌视觉焕新',
+    description: '全球品牌标识升级，包括字体、配色方案及 3D 辅助图形。',
+    status: TaskStatus.DONE,
+    initiator: MOCK_USERS[0],
+    steps: [
+      { id: 's3-1', name: 'Logo 设计', status: StepStatus.SUCCEEDED, uiIntent: UIIntent.NONE, assignee: MOCK_USERS[3] },
+      { id: 's3-2', name: '规范手册', status: StepStatus.SUCCEEDED, uiIntent: UIIntent.NONE, assignee: MOCK_USERS[3] }
+    ]
+  },
+  {
+    id: 'T4',
+    name: '核心官网 2.0 上线',
+    description: '响应式官网前端重构与性能优化。',
+    status: TaskStatus.DONE,
+    initiator: MOCK_USERS[0],
+    steps: [
+      { id: 's4-1', name: '性能测试', status: StepStatus.SUCCEEDED, uiIntent: UIIntent.NONE, assignee: MOCK_USERS[4] }
+    ]
+  },
+  {
+    id: 'T5',
+    name: '2025 年度战略研讨',
+    description: '制定明年的产品路线图与核心增长指标。',
+    status: TaskStatus.WAITING_INPUT,
+    initiator: MOCK_USERS[0],
+    steps: [
       {
-        id: 's2-1',
-        name: '撰写技术科普文案',
-        status: StepStatus.RUNNING,
-        uiIntent: UIIntent.NONE,
-        assignee: MOCK_USERS[2]
-      },
-      {
-        id: 's2-2',
-        name: '视觉海报设计',
-        status: StepStatus.PENDING,
-        uiIntent: UIIntent.NONE,
-        assignee: MOCK_USERS[3]
+        id: 's5-1',
+        name: '各部门提案汇总',
+        status: StepStatus.NEED_CONFIRM,
+        uiIntent: UIIntent.FORM,
+        assignee: CURRENT_USER,
+        uiSchema: {
+          title: '年度目标设定',
+          fields: [{ key: 'target', label: '增长目标', type: 'number', required: true }],
+          actions: [{ type: 'SUBMIT', label: '提交提案' }]
+        }
       }
     ]
   }

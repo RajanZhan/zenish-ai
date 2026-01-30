@@ -1,7 +1,7 @@
 
 import React, { useState, useCallback, useEffect, useRef } from 'react';
-import { Task, Message, TaskStatus, StepStatus, MessageType, User, Attachment, FileItem } from './types';
-import { INITIAL_TASKS, INITIAL_FILES, WELCOME_MESSAGE, CURRENT_USER, MOCK_USERS } from './constants';
+import { Task, Message, TaskStatus, StepStatus, MessageType, User, FileItem, UIIntent } from './types';
+import { INITIAL_TASKS, INITIAL_FILES, WELCOME_MESSAGE, CURRENT_USER } from './constants';
 import ChatArea from './components/ChatArea';
 import TaskDrawer from './components/TaskDrawer';
 import HomeDashboard from './components/HomeDashboard';
@@ -9,7 +9,7 @@ import FeedArea from './components/FeedArea';
 import FileArea from './components/FileArea';
 import TodoArea from './components/TodoArea';
 import OrgArea from './components/OrgArea';
-import { chatWithGemini } from './services/geminiService';
+import { chatWithGemini, planTaskWithGemini } from './services/geminiService';
 
 const Header: React.FC = () => (
   <header className="h-[72px] bg-white border-b border-slate-100 flex items-center justify-between px-8 shrink-0 z-50">
@@ -63,20 +63,9 @@ const Sidebar: React.FC<{ activeTab: string; onTabChange: (tab: string) => void 
           }`}
         >
           <i className={`fas ${item.icon} text-xl`}></i>
-          <span className="absolute left-20 bg-slate-800 text-white text-[11px] px-3 py-2 rounded-xl opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-50 font-black border border-slate-700 shadow-2xl">
-            {item.label}
-          </span>
           {activeTab === item.id && <div className="absolute -left-2 w-2 h-8 bg-indigo-500 rounded-r-full shadow-[4px_0_12px_rgba(99,102,241,0.5)]"></div>}
         </button>
       ))}
-    </div>
-    <div className="mt-auto flex flex-col gap-6">
-      <button className="w-14 h-14 rounded-2xl flex items-center justify-center text-slate-500 hover:text-white transition-colors">
-        <i className="fas fa-plus text-lg"></i>
-      </button>
-      <button className="w-14 h-14 rounded-2xl flex items-center justify-center text-slate-500 hover:text-white transition-colors">
-        <i className="fas fa-gear text-lg"></i>
-      </button>
     </div>
   </div>
 );
@@ -92,18 +81,15 @@ const App: React.FC = () => {
       type: 'AI', 
       timestamp: Date.now(),
       actions: [
-        { label: '新建并行任务', value: 'parallel_new', recommended: true },
+        { label: '编排新任务', value: 'orchestrate_new', recommended: true },
         { label: '查看当前任务进度', value: 'check_progress' }
       ]
     }
   ]);
 
   const [files, setFiles] = useState<FileItem[]>(INITIAL_FILES);
-  
-  // Resizing state
   const [sidebarWidth, setSidebarWidth] = useState(520);
   const [isResizing, setIsResizing] = useState(false);
-  const sidebarRef = useRef<HTMLDivElement>(null);
 
   const startResizing = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
@@ -116,7 +102,6 @@ const App: React.FC = () => {
 
   const resize = useCallback((e: MouseEvent) => {
     if (isResizing) {
-      // Sidebar width = mouse position - far left sidebar width (84px)
       const newWidth = e.clientX - 84;
       if (newWidth >= 380 && newWidth <= 800) {
         setSidebarWidth(newWidth);
@@ -147,53 +132,70 @@ const App: React.FC = () => {
 
   const handleSendMessage = async (text: string) => {
     addMessage(text, 'USER');
-    const response = await chatWithGemini(text);
-    addMessage(response || "正在调度资源，请稍候...", 'AI', [
-      { label: '并行新建任务 (推荐)', value: 'parallel_new', recommended: true },
-      { label: '等待当前任务完成', value: 'wait_current' }
-    ]);
+    
+    // Check if user is asking to start a task
+    if (text.includes('我想') || text.includes('开始') || text.includes('策划')) {
+      addMessage("正在根据您的意图进行动态任务编排...", 'AI');
+      const plan = await planTaskWithGemini(text);
+      if (plan && plan.steps) {
+        const newTask: Task = {
+          id: 'T' + Math.floor(Math.random() * 1000),
+          name: plan.taskName || '新协作任务',
+          description: plan.description || text,
+          status: TaskStatus.RUNNING,
+          initiator: CURRENT_USER,
+          steps: plan.steps.map((s: any, idx: number) => ({
+            id: 's' + idx + '-' + Date.now(),
+            name: s.name,
+            status: idx === 0 ? (s.needsInteraction ? StepStatus.NEED_CONFIRM : StepStatus.RUNNING) : StepStatus.PENDING,
+            uiIntent: s.uiIntent as UIIntent,
+            uiSchema: s.uiSchema,
+            assignee: idx === 0 ? CURRENT_USER : undefined
+          }))
+        };
+        setTasks(prev => [newTask, ...prev]);
+        setActiveTaskId(newTask.id);
+        addMessage(`任务“${plan.taskName}”已成功编排，请在右侧节点流水线中查看。`, 'AI', [
+          { label: '查看任务详情', value: 'view_active', recommended: true }
+        ]);
+      } else {
+        addMessage("编排过程中遇到了一些困难，建议您手动创建或提供更详细的意图。", 'AI');
+      }
+    } else {
+      const response = await chatWithGemini(text);
+      addMessage(response || "我在这里，请随时下达指令。", 'AI');
+    }
   };
 
   const handleActionClick = (value: string) => {
-    if (value === 'parallel_new') {
-      const newTask: Task = {
-        id: 't' + Date.now(),
-        name: '未命名实时协作',
-        description: '由对话层发起的动态任务。',
-        status: TaskStatus.RUNNING,
-        initiator: CURRENT_USER,
-        steps: [
-          { 
-            id: 's' + Date.now(), 
-            name: '任务节点初始化', 
-            status: StepStatus.NEED_CONFIRM, 
-            uiIntent: 'FORM' as any,
-            uiSchema: {
-              title: '补全初步任务详情',
-              fields: [
-                { key: 'target', label: '目标描述', type: 'text', required: true },
-                { key: 'deadline', label: '截止时间', type: 'text' }
-              ],
-              actions: [{ type: 'SUBMIT', label: '创建任务' }]
-            }
-          }
-        ]
-      };
-      setTasks(prev => [...prev, newTask]);
-      setActiveTaskId(newTask.id);
-      addMessage("已在右侧任务抽屉启动新任务执行流。", 'AI');
+    if (value === 'orchestrate_new') {
+      addMessage("请告诉我您想开启什么样的协作流程？例如：“策划一次品牌活动”或“分析本季度的财务数据”。", 'AI');
     }
   };
 
   const handleStepAction = (taskId: string, stepId: string, data: any) => {
     setTasks(prevTasks => prevTasks.map(task => {
       if (task.id !== taskId) return task;
+      const stepIdx = task.steps.findIndex(s => s.id === stepId);
+      const newSteps = task.steps.map((step, idx) => {
+        if (idx === stepIdx) return { ...step, status: StepStatus.SUCCEEDED };
+        if (idx === stepIdx + 1) return { ...step, status: step.uiIntent === UIIntent.FORM ? StepStatus.NEED_CONFIRM : StepStatus.RUNNING };
+        return step;
+      });
+      return { ...task, steps: newSteps, status: stepIdx === task.steps.length - 1 ? TaskStatus.DONE : TaskStatus.RUNNING };
+    }));
+    addMessage(`节点已处理。正在推进至下一个执行流节点。`, 'AI');
+  };
+
+  const handleAssignUser = (taskId: string, stepId: string, user: User) => {
+    setTasks(prevTasks => prevTasks.map(task => {
+      if (task.id !== taskId) return task;
       return {
         ...task,
-        steps: task.steps.map(step => step.id === stepId ? { ...step, status: StepStatus.SUCCEEDED } : step)
+        steps: task.steps.map(step => step.id === stepId ? { ...step, assignee: user } : step)
       };
     }));
-    addMessage(`节点 [${tasks.find(t=>t.id===taskId)?.steps.find(s=>s.id===stepId)?.name}] 已在执行层处理。`, 'AI');
+    addMessage(`已成功邀请 ${user.name} 加入节点“${tasks.find(t=>t.id===taskId)?.steps.find(s=>s.id===stepId)?.name}”的协作。`, 'AI');
   };
 
   return (
@@ -204,34 +206,24 @@ const App: React.FC = () => {
         <main className="flex-1 overflow-hidden relative">
           {activeTab === 'chat' ? (
             <div className="flex h-full animate-in fade-in duration-300">
-              {/* Conversation Layer */}
-              <div 
-                className="shrink-0 h-full relative" 
-                style={{ width: `${sidebarWidth}px` }}
-              >
+              <div className="shrink-0 h-full relative" style={{ width: `${sidebarWidth}px` }}>
                 <ChatArea 
                   messages={messages} 
                   onSendMessage={handleSendMessage} 
                   onActionClick={handleActionClick}
                   availableFiles={files}
                 />
-                
-                {/* Resizer Handle */}
-                <div
-                  onMouseDown={startResizing}
-                  className={`absolute top-0 -right-0.5 w-1 h-full cursor-col-resize z-50 transition-colors group flex items-center justify-center ${isResizing ? 'bg-indigo-500' : 'hover:bg-indigo-400/30'}`}
-                >
+                <div onMouseDown={startResizing} className={`absolute top-0 -right-0.5 w-1 h-full cursor-col-resize z-50 transition-colors group flex items-center justify-center ${isResizing ? 'bg-indigo-500' : 'hover:bg-indigo-400/30'}`}>
                   <div className={`w-[2px] h-12 rounded-full transition-all ${isResizing ? 'bg-white opacity-100' : 'bg-slate-200 opacity-0 group-hover:opacity-100'}`}></div>
                 </div>
               </div>
-
-              {/* Execution Layer */}
               <div className="flex-1 h-full">
                 <TaskDrawer 
                   tasks={tasks} 
                   activeTaskId={activeTaskId} 
                   onSetActiveTask={setActiveTaskId}
                   onStepAction={handleStepAction}
+                  onAssignUser={handleAssignUser}
                 />
               </div>
             </div>
