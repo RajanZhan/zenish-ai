@@ -98,7 +98,7 @@ const OrgArea: React.FC = () => {
       {/* Main Content Detail */}
       <div className="flex-1 h-full overflow-y-auto p-8 scroll-smooth no-scrollbar">
         {selectedNode ? (
-          <div className="max-w-5xl mx-auto space-y-8 animate-in fade-in duration-500">
+          <div className="max-w-7xl space-y-8 animate-in fade-in duration-500">
             {/* Dept Header */}
             <div className="bg-white p-8 rounded-[40px] border border-slate-100 shadow-sm relative overflow-hidden">
               <div className="relative z-10 flex flex-col md:flex-row justify-between gap-8">
